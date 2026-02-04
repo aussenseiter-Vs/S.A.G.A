@@ -18,16 +18,25 @@ WidgetTerminal terminal(V10);
 Adafruit_PWMServoDriver pwm(0x40);
 
 // ================= I2C PINS (for PCA9685 communication) =================
-#define I2C_SDA 21  // Default SDA pin for ESP32
-#define I2C_SCL 22  // Default SCL pin for ESP32
+// These pins carry control data to the PCA9685 PWM driver
+// The PCA9685 then generates PWM signals for all 16 servos
+#define I2C_SDA 21  // Default SDA pin for ESP32 (Data line)
+#define I2C_SCL 22  // Default SCL pin for ESP32 (Clock line)
 
 // ================= ULTRASONIC SENSOR PINS =================
-#define TRIG_PIN 5   // Trigger pin for ultrasonic sensor
-#define ECHO_PIN 18  // Echo pin for ultrasonic sensor
+// Choose any safe GPIO pins that don't conflict with I2C
+// RECOMMENDED PIN OPTIONS:
+//   Option 1: TRIG=5,  ECHO=18  (current - good choice)
+//   Option 2: TRIG=4,  ECHO=16
+//   Option 3: TRIG=13, ECHO=12
+//   Option 4: TRIG=26, ECHO=25
+//   Option 5: TRIG=33, ECHO=32
+#define TRIG_PIN 5   // Trigger pin - sends ultrasonic pulse (OUTPUT)
+#define ECHO_PIN 18  // Echo pin - receives reflected pulse (INPUT)
 
 // ================= DOOR CONTROL SETTINGS =================
 #define DOOR_DISTANCE_THRESHOLD 50  // Distance in cm to trigger door opening
-#define DOOR_SERVO_START 12         // First servo for door (servo 12)
+#define DOOR_SERVO_START 14         // First servo for door (servo 14)
 #define DOOR_SERVO_END 15           // Last servo for door (servo 15)
 
 bool doorIsOpen = false;  // Track door state
@@ -63,10 +72,10 @@ ServoState servos[TOTAL_SERVO] = {
   {9,   395, 235, 315, 1300, 1200, false},  // Servo 9
   {10,  395, 235, 315, 1200, 1200, false},  // Servo 10
   {11,  395, 235, 315, 1200, 1200, false},  // Servo 11
-  {12,  395, 235, 315, 1200, 1200, false},  // Servo 12 (Door)
-  {13,  395, 235, 315, 1200, 1200, false},  // Servo 13 (Door - alternates CW/CCW)
-  {14,  395, 235, 315, 1200, 1200, false},  // Servo 14 (Door)
-  {15,  395, 235, 315, 1200, 1200, false},  // Servo 15 (Door)
+  {12,  395, 235, 315, 1200, 1200, false},  // Servo 12
+  {13,  395, 235, 315, 1200, 1200, false},  // Servo 13 (alternates CW/CCW)
+  {14,  395, 235, 315, 1200, 1200, false},  // Servo 14 (Auto Door)
+  {15,  395, 235, 315, 1200, 1200, false},  // Servo 15 (Auto Door)
 };
 
 // Track servo 13's next direction (true = CW, false = CCW)
@@ -285,7 +294,7 @@ void setup() {
   terminal.println("V3: Stairs Control");
   terminal.println("V4: Roof Control");
   terminal.println("━━━━━━━━━━━━━━━━━━━━━━━━");
-  terminal.println("🚪 Auto Door: Servos 12-15");
+  terminal.println("🚪 Auto Door: Servos 14-15");
   terminal.println("    Sensor on pins 5 & 18");
   terminal.println("    ⚠️ Servo 13 alternates CW/CCW");
   terminal.println("━━━━━━━━━━━━━━━━━━━━━━━━");
