@@ -1,6 +1,6 @@
 #define BLYNK_TEMPLATE_ID "TMPL6gB3c0_RQ"
 #define BLYNK_TEMPLATE_NAME "penggerak servo"
-#define BLYNK_AUTH_TOKEN "SrePreNN9hj_OX8Woprkwl9MoSt6fV_s"
+#define BLYNK_AUTH_TOKEN "LSPKUZ_qlj_Xe8sNLsDHf2kPmEyuAF6c"
 
 #include <Wire.h>
 #include <WiFi.h>
@@ -17,348 +17,257 @@ WidgetTerminal terminal(V10);
 // ================= PCA9685 =================
 Adafruit_PWMServoDriver pwm(0x40);
 
-// ================= I2C PINS =================
-#define I2C_SDA 21  // I2C Data pin
-#define I2C_SCL 22  // I2C Clock pin
+// ================= SERVO =================
+#define TOTAL_SERVO 16
+constexpr uint8_t servo[TOTAL_SERVO] = {
+  0, 1, 2, 3, 4, 5, 6, 7,
+  8, 9,10,11,12,13,14,15
+};
+
+// ================= CONTINUOUS SERVO (default values for 0-7) =================
+#define SERVO_CW    395
+#define SERVO_CCW  235
+#define SERVO_STOP 315
+
+// ================= TIMING =================
+#define MOVE_TIME_180 1200
+#define MOVE_TIME_90   600
+#define GAP_TIME      1200
 
 // ================= SERVO CONTROLLER CLASS =================
 class ServoController {
-private:
-  uint8_t pin;              // Servo pin on PCA9685
-  uint16_t pwmCW;           // PWM value for clockwise rotation
-  uint16_t pwmCCW;          // PWM value for counter-clockwise rotation
-  uint16_t pwmStop;         // PWM value to stop servo
-  uint16_t rotationTime;    // Time to rotate in milliseconds
-  String name;              // Servo name for debugging
-  Adafruit_PWMServoDriver* pwmDriver;  // Reference to PWM driver
-
 public:
-  // Constructor
-  ServoController(String servoName, uint8_t servoPin, 
-                  uint16_t cwValue, uint16_t ccwValue, uint16_t stopValue,
-                  uint16_t rotTime, Adafruit_PWMServoDriver* driver) {
-    name = servoName;
-    pin = servoPin;
-    pwmCW = cwValue;
-    pwmCCW = ccwValue;
-    pwmStop = stopValue;
+  String name;
+  uint8_t pin;
+  uint16_t cwPWM;
+  uint16_t ccwPWM;
+  uint16_t stopPWM;
+  uint16_t rotationTime;
+  Adafruit_PWMServoDriver* pwmDriver;
+
+  ServoController(String n, uint8_t p, uint16_t cw, uint16_t ccw, 
+                  uint16_t stop, uint16_t rotTime, Adafruit_PWMServoDriver* driver) {
+    name = n;
+    pin = p;
+    cwPWM = cw;
+    ccwPWM = ccw;
+    stopPWM = stop;
     rotationTime = rotTime;
     pwmDriver = driver;
   }
 
-  // Rotate clockwise for specified duration (or default)
-  void rotateCW(int duration = -1) {
-    int moveTime = (duration > 0) ? duration : rotationTime;
-    terminal.print("   ");
-    terminal.print(name);
-    terminal.println(": CW ↻");
-    terminal.flush();
-    
-    pwmDriver->setPWM(pin, 0, pwmCW);
-    delay(moveTime);
+  void moveCW() {
+    pwmDriver->setPWM(pin, 0, cwPWM);
   }
 
-  // Rotate counter-clockwise for specified duration (or default)
-  void rotateCCW(int duration = -1) {
-    int moveTime = (duration > 0) ? duration : rotationTime;
-    terminal.print("   ");
-    terminal.print(name);
-    terminal.println(": CCW ↺");
-    terminal.flush();
-    
-    pwmDriver->setPWM(pin, 0, pwmCCW);
-    delay(moveTime);
+  void moveCCW() {
+    pwmDriver->setPWM(pin, 0, ccwPWM);
   }
 
-  // Stop the servo
   void stop() {
-    pwmDriver->setPWM(pin, 0, pwmStop);
+    pwmDriver->setPWM(pin, 0, stopPWM);
   }
 
-  // Set rotation speed (by adjusting PWM values)
-  void setSpeed(uint16_t cwValue, uint16_t ccwValue) {
-    pwmCW = cwValue;
-    pwmCCW = ccwValue;
+  void rotate(bool clockwise) {
+    if (clockwise) moveCW();
+    else moveCCW();
+    delay(rotationTime);
+    stop();
   }
-
-  // Set rotation duration
-  void setRotationTime(uint16_t milliseconds) {
-    rotationTime = milliseconds;
-  }
-
-  // Get servo information
-  String getName() { return name; }
-  uint8_t getPin() { return pin; }
-  uint16_t getRotationTime() { return rotationTime; }
 };
 
-// ================= SERVO OBJECTS =================
-// Door servos (0-1)
-ServoController* servo0;
-ServoController* servo1;
+// ================= SERVO 8 & 9 INSTANCES =================
+ServoController* servo8 = nullptr;
+ServoController* servo9 = nullptr;
 
-// Roof servos (14-15)
-ServoController* servo14;
-ServoController* servo15;
+// ================= STATUS TOGGLE =================
+bool dirBtn1 = false;   // false = DOWN, true = UP
+bool dirBtn2 = false;
+bool dirBtn3 = false;   // untuk tombol V2
 
-// ================= SERVO CONFIGURATION FUNCTIONS =================
-
-// Configure Servo 0 (Door Left)
-void configureServo0() {
-  servo0 = new ServoController(
-    "Servo 0",            // Name
-    0,                    // Pin on PCA9685
-    395,                  // CW PWM value
+// ================= CONFIGURE SERVOS 8-9 =================
+void configureServo8() {
+  servo8 = new ServoController(
+    "Servo 8",            // Name
+    8,                    // Pin on PCA9685
+    420,                  // CW PWM value
     235,                  // CCW PWM value
     315,                  // STOP PWM value
-    2600,                 // Rotation time (ms) for 260°
+    1500,                 // Rotation time (ms) for 180°
     &pwm                  // PWM driver reference
   );
 }
 
-// Configure Servo 1 (Door Right)
-void configureServo1() {
-  servo1 = new ServoController(
-    "Servo 1",            // Name
-    1,                    // Pin on PCA9685
-    395,                  // CW PWM value
+void configureServo9() {
+  servo9 = new ServoController(
+    "Servo 9",            // Name
+    9,                    // Pin on PCA9685
+    420,                  // CW PWM value
     235,                  // CCW PWM value
     315,                  // STOP PWM value
-    2600,                 // Rotation time (ms) for 260°
+    1500,                 // Rotation time (ms) for 180°
     &pwm                  // PWM driver reference
   );
 }
 
-// Configure Servo 14 (Roof Left)
-void configureServo14() {
-  servo14 = new ServoController(
-    "Servo 14",           // Name
-    14,                   // Pin on PCA9685
-    395,                  // CW PWM value
-    235,                  // CCW PWM value
-    315,                  // STOP PWM value
-    2600,                 // Rotation time (ms) for 260°
-    &pwm                  // PWM driver reference
-  );
+// ================= STOP ALL =================
+void stopAllServo() {
+  for (int i = 0; i < TOTAL_SERVO; i++) {
+    pwm.setPWM(servo[i], 0, SERVO_STOP);
+  }
 }
 
-// Configure Servo 15 (Roof Right)
-void configureServo15() {
-  servo15 = new ServoController(
-    "Servo 15",           // Name
-    15,                   // Pin on PCA9685
-    395,                  // CW PWM value
-    235,                  // CCW PWM value
-    315,                  // STOP PWM value
-    2600,                 // Rotation time (ms) for 260°
-    &pwm                  // PWM driver reference
-  );
+// ================= GROUP 0–7 (MODE UP/DOWN) =================
+// UP   → EVEN first → ODD
+// DOWN → ODD first  → EVEN
+void moveGroupOddEvenOrder(int start, int end, bool up) {
+
+  if (start < 0 || end >= TOTAL_SERVO || start > end) return;
+
+  // ---------- UP ----------
+  if (up) {
+    // EVEN FIRST
+    for (int i = start; i <= end; i++) {
+      if (i % 2 == 0) {
+        pwm.setPWM(servo[i], 0, SERVO_CW);
+        delay(MOVE_TIME_180);
+        pwm.setPWM(servo[i], 0, SERVO_STOP);
+        delay(GAP_TIME);
+      }
+    }
+
+    // ODD SECOND
+    for (int i = start; i <= end; i++) {
+      if (i % 2 == 1) {
+        pwm.setPWM(servo[i], 0, SERVO_CCW);
+        delay(MOVE_TIME_90);
+        pwm.setPWM(servo[i], 0, SERVO_STOP);
+        delay(GAP_TIME);
+      }
+    }
+  }
+
+  // ---------- DOWN ----------
+  else {
+    // ODD FIRST
+    for (int i = start; i <= end; i++) {
+      if (i % 2 == 1) {
+        pwm.setPWM(servo[i], 0, SERVO_CW);
+        delay(MOVE_TIME_90);
+        pwm.setPWM(servo[i], 0, SERVO_STOP);
+        delay(GAP_TIME);
+      }
+    }
+
+    // EVEN SECOND
+    for (int i = start; i <= end; i++) {
+      if (i % 2 == 0) {
+        pwm.setPWM(servo[i], 0, SERVO_CCW);
+        delay(MOVE_TIME_180);
+        pwm.setPWM(servo[i], 0, SERVO_STOP);
+        delay(GAP_TIME);
+      }
+    }
+  }
 }
 
-// Initialize all servos
-void initializeAllServos() {
-  configureServo0();
-  configureServo1();
-  configureServo14();
-  configureServo15();
+// ================= GROUP 8–9 (TOGGLE UP/DOWN, 180deg) =================
+// Now uses the ServoController instances
+void moveGroup8_9_Toggle180(bool up) {
   
-  // Stop all servos on initialization
-  servo0->stop();
-  servo1->stop();
-  servo14->stop();
-  servo15->stop();
-}
+  if (!servo8 || !servo9) return;
 
-// ================= DOOR CONTROL FUNCTIONS =================
-
-// Stop all door servos
-void stopDoorServos() {
-  servo0->stop();
-  servo1->stop();
-}
-
-// Open door (260° rotation)
-void openDoor() {
-  terminal.println("🚪 Opening door (260° rotation)...");
-  terminal.flush();
-  
-  // Servo 0: Counter-Clockwise
-  // Servo 1: Clockwise
-  servo0->rotateCCW();   // Uses default rotation time
-  servo1->rotateCW();    // Moves simultaneously in code, but delay is sequential
-  
-  // Stop both servos
-  stopDoorServos();
-  
-  terminal.println("✅ Door opened (260°)");
-  terminal.flush();
-  
-  delay(500);  // Pause at end position
-}
-
-// Close door (return 260°)
-void closeDoor() {
-  terminal.println("🚪 Closing door (returning 260°)...");
-  terminal.flush();
-  
-  // Reverse direction to return
-  // Servo 0: Clockwise
-  // Servo 1: Counter-Clockwise
-  servo0->rotateCW();
-  servo1->rotateCCW();
-  
-  // Stop both servos
-  stopDoorServos();
-  
-  terminal.println("✅ Door closed (back to 0°)");
-  terminal.flush();
-  
-  delay(500);  // Pause at end position
-}
-
-// ================= ROOF CONTROL FUNCTIONS =================
-
-// Stop all roof servos
-void stopRoofServos() {
-  servo14->stop();
-  servo15->stop();
-}
-
-// Open roof (260° rotation)
-void openRoof() {
-  terminal.println("🏠 Opening roof (260° rotation)...");
-  terminal.flush();
-  
-  // Servo 14: Counter-Clockwise
-  // Servo 15: Clockwise
-  servo14->rotateCCW();   // Uses default rotation time
-  servo15->rotateCW();    // Moves simultaneously in code, but delay is sequential
-  
-  // Stop both servos
-  stopRoofServos();
-  
-  terminal.println("✅ Roof opened (260°)");
-  terminal.flush();
-  
-  delay(500);  // Pause at end position
-}
-
-// Close roof (return 260°)
-void closeRoof() {
-  terminal.println("🏠 Closing roof (returning 260°)...");
-  terminal.flush();
-  
-  // Reverse direction to return
-  // Servo 14: Clockwise
-  // Servo 15: Counter-Clockwise
-  servo14->rotateCW();
-  servo15->rotateCCW();
-  
-  // Stop both servos
-  stopRoofServos();
-  
-  terminal.println("✅ Roof closed (back to 0°)");
-  terminal.flush();
-  
-  delay(500);  // Pause at end position
-}
-
-// ================= UTILITY FUNCTIONS =================
-
-// Stop ALL servos (door and roof)
-void stopAllServos() {
-  stopDoorServos();
-  stopRoofServos();
+  // UP mode: Servo 8 (even) = CW, Servo 9 (odd) = CCW
+  if (up) {
+    servo8->rotate(true);   // CW
+    delay(GAP_TIME);
+    servo9->rotate(false);  // CCW
+    delay(GAP_TIME);
+  }
+  // DOWN mode: Servo 8 (even) = CCW, Servo 9 (odd) = CW
+  else {
+    servo8->rotate(false);  // CCW
+    delay(GAP_TIME);
+    servo9->rotate(true);   // CW
+    delay(GAP_TIME);
+  }
 }
 
 // ================= SETUP =================
 void setup() {
   Serial.begin(115200);
-  
-  // Configure I2C
-  Wire.begin(I2C_SDA, I2C_SCL);
-  
-  // Initialize PCA9685
-  pwm.begin();
-  pwm.setPWMFreq(50);  // 50Hz for servos
-  
-  delay(100);
-  
-  // Connect to WiFi
+
   WiFi.begin(ssid, pass);
   while (WiFi.status() != WL_CONNECTED) {
     delay(200);
-    Serial.print(".");
   }
-  Serial.println("\nWiFi Connected!");
-  
-  // Initialize Blynk
+
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
-  
-  // Initialize all servo objects
-  initializeAllServos();
-  
-  // Welcome message
-  terminal.clear();
-  terminal.println("🚀 DOOR & ROOF CONTROLLER (OOP)");
-  terminal.println("━━━━━━━━━━━━━━━━━━━━━━━━");
-  terminal.println("V0: Door Control (Toggle)");
-  terminal.println("    Servos 0-1");
-  terminal.println("    260° rotation");
-  terminal.println("━━━━━━━━━━━━━━━━━━━━━━━━");
-  terminal.println("V5: Roof Control (Toggle)");
-  terminal.println("    Servos 14-15");
-  terminal.println("    260° rotation");
-  terminal.println("━━━━━━━━━━━━━━━━━━━━━━━━");
-  terminal.println("Open: S0/14=CCW ↺, S1/15=CW ↻");
-  terminal.println("Close: Reverse direction");
-  terminal.println("━━━━━━━━━━━━━━━━━━━━━━━━");
+
+  pwm.begin();
+  pwm.setPWMFreq(50);
+
+  // Configure servos 8 & 9
+  configureServo8();
+  configureServo9();
+
+  stopAllServo();
+
+  terminal.println("🚀 SYSTEM READY");
+  terminal.println("V0 : Servo 0–3 (toggle UP/DOWN)");
+  terminal.println("V1 : Servo 4–7 (toggle UP/DOWN)");
+  terminal.println("V2 : Servo 8–9 (toggle UP/DOWN, 180deg, CONFIGURABLE)");
   terminal.flush();
 }
 
-// ================= MAIN LOOP =================
+// ================= LOOP =================
 void loop() {
   Blynk.run();
 }
 
-// ================= BLYNK VIRTUAL PIN HANDLERS =================
+// ================= BLYNK BUTTONS =================
 
-// V0 → Door Control (Toggle)
+// Tombol 1 → Servo 0–3
 BLYNK_WRITE(V0) {
-  static bool doorOpen = false;
-  
   if (param.asInt()) {
-    doorOpen = !doorOpen;
-    
-    if (doorOpen) {
-      terminal.println("🔘 V0 pressed → OPEN 🚪");
-      terminal.flush();
-      openDoor();
-    }
-    else {
-      terminal.println("🔘 V0 pressed → CLOSE 🚪");
-      terminal.flush();
-      closeDoor();
-    }
+    dirBtn1 = !dirBtn1;
+
+    terminal.printf(
+      "🔘 V0 | %s\n",
+      dirBtn1 ? "UP (EVEN FIRST)" : "DOWN (ODD FIRST)"
+    );
+    terminal.flush();
+
+    moveGroupOddEvenOrder(0, 3, dirBtn1);
   }
 }
 
-// V1 → Roof Control (Toggle)
+// Tombol 2 → Servo 4–7
 BLYNK_WRITE(V1) {
-  static bool roofOpen = false;
-  
   if (param.asInt()) {
-    roofOpen = !roofOpen;
-    
-    if (roofOpen) {
-      terminal.println("🔘 V5 pressed → OPEN 🏠");
-      terminal.flush();
-      openRoof();
-    }
-    else {
-      terminal.println("🔘 V5 pressed → CLOSE 🏠");
-      terminal.flush();
-      closeRoof();
-    }
+    dirBtn2 = !dirBtn2;
+
+    terminal.printf(
+      "🔘 V1 | %s\n",
+      dirBtn2 ? "UP (EVEN FIRST)" : "DOWN (ODD FIRST)"
+    );
+    terminal.flush();
+
+    moveGroupOddEvenOrder(4, 7, dirBtn2);
+  }
+}
+
+// Tombol 3 → Servo 8–9
+BLYNK_WRITE(V2) {
+  if (param.asInt()) {
+    dirBtn3 = !dirBtn3;
+
+    terminal.printf(
+      "🔘 V2 | Servo 8–9 | %s\n",
+      dirBtn3 ? "UP (8=CW, 9=CCW)" : "DOWN (8=CCW, 9=CW)"
+    );
+    terminal.flush();
+
+    moveGroup8_9_Toggle180(dirBtn3);
   }
 }
