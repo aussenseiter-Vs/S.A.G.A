@@ -100,15 +100,3 @@ Dibangun dengan bangga (dan banyak begadang) oleh:
 *Dibuat untuk merayakan HUT Yadika Pamor yang ke-50.*
 
 ---
-
-## 📄 Lisensi
-
-Proyek ini bersifat open source dan tersedia di bawah [Lisensi MIT](LICENSE).
-
----
-
-<p align="center">
-  <i>"we didnt win any trophy but we won something better, with losing we learn"</i><br/>
-  <b>— Tim S.A.G.A</b></br>
-  <p>im proud of us team, lets be better next time</p>
-</p>
